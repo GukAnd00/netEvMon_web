@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="UA">
+<head>
+    <link href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font@4.x/css/materialdesignicons.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.min.css" rel="stylesheet">
+    <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui" name="viewport">
+    <title>List of machines</title>
+</head>
+<body>
+<div id="app">
+    <v-app id="inspire">
+        <v-dialog
+                v-model="dialog"
+                scrollable
+                width="1200"
+        >
+            <v-card
+                    class="mx-auto"
+            >
+                <v-img
+                        class="white--text align-end"
+                        height="300"
+                        :src="dialogImage"
+
+                >
+                    <v-card-title >
+                        {{dialogHeader}}
+                    </v-card-title>
+                </v-img>
+                <v-divider></v-divider>
+                <v-card-text style="height: 600px;">
+                    <li style="list-style-type:none;" v-for="(item, index) in dialogText">
+                        {{ item }}
+                    </li>
+                </v-card-text>
+                <v-divider></v-divider>
+                <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn
+                            color="primary"
+                            text
+                            @click="dialog = false"
+                    >
+                        Close
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+        <div>
+            <v-toolbar
+                    dark
+                    src="https://cdn.vuetifyjs.com/images/backgrounds/vbanner.jpg"
+            >
+                <v-toolbar-title>Table of machines</v-toolbar-title>
+                <v-spacer></v-spacer>
+                <v-row
+                        justify="center"
+                        no-gutters
+                >
+                    <v-btn
+                            :key="link"
+                            class="my-2"
+                            color="white"
+                            rounded
+                            text
+                            v-for="link in links"
+                            v-on:click="kibana"
+                    >
+                        {{ link }}
+                    </v-btn>
+                    
+                </v-row>
+                <v-spacer></v-spacer>
+                <v-switch
+                        label="Email Notifications"
+                        v-model="switchStatus"
+                ></v-switch>
+            </v-toolbar>
+        </div>
+        <v-main>
+            <v-card-text style="height: 200px;">
+                <v-simple-table>
+                    <template v-slot:default>
+                        <thead>
+                        <tr >
+                            <th
+                                    class="text-left"
+                                    v-for="(item, index) in machinesHeaders"
+                            >
+                                {{item}}
+                            </th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr
+                                :key="item.name"
+                                v-for="(item, index) in machines"
+                        >
+                            <td>{{ index+1 }}</td>
+                            <td v-on:click="say(JSON.stringify(item.history[item.history.length-1], null, 2), 0)">{{ item.name }}</td>
+                            <td>{{ item.lastActivity["_source"].host.ip[0] }}</td>
+                            <td>
+                                <div v-on:click="say(JSON.stringify(item.attack, null, 2), 2)" v-if="item.health === 3">&#128308 &nbsp &nbsp BAD, HTTP</div>
+                                <div v-if="item.health === 2">&#128993 &nbsp &nbsp OK</div>
+                                <div v-if="item.health === 1">&#128994 &nbsp &nbsp GOOD</div>
+                            </td>
+                            <td v-on:click="say(JSON.stringify(item.lastActivity, null, 2 ),1)">{{ item.lastActivity["_source"]["@timestamp"] }}&nbsp&nbsp{{ item.lastActivity["_source"].type }}</td>
+                            <td v-on:click="say(JSON.stringify(item.numberOfRequestsPerPeriod[item.numberOfRequestsPerPeriod.length-1].byRequestType, null, 2 ),3)">{{ item.numberOfRequestsPerPeriod[item.numberOfRequestsPerPeriod.length-1].value }} requests from {{ item.numberOfRequestsPerPeriod[item.numberOfRequestsPerPeriod.length-1].period.split("---")[0] }}</td>
+                        </tr>
+                        </tbody>
+                    </template>
+                </v-simple-table>
+            </v-card-text>
+        </v-main>
+        
+        <v-footer
+                app color="primary"
+                dark
+                flat
+        >
+            <v-card
+                    class="primary white--text text-center"
+                    flat
+                    tile
+                    width='100%'
+            >
+            <v-card-text class="white--text text-center pt-0" >
+                HEALTH - status of machine:
+                <br>&#128994 GOOD - no issues with network activity;
+                &#128993 OK - may be some issues with network activity, but in range of statistics; 
+                <br>&#128308 BAD - occurs issue with network activity, may be an attack. next word - type of packets which used for DoS attack. Click for details about attack.
+            </v-card-text>
+                <v-divider></v-divider>
+                <v-card-text class="white--text">
+                    <strong>Andrii Guk (c) 2021</strong>
+                </v-card-text>
+            </v-card>
+        </v-footer>
+    </v-app>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<script>
+    new Vue({
+        el: '#app',
+        vuetify: new Vuetify(),
+        data () {
+            return {
+                switchStatus: true,
+                dialog: false,
+                dialogText: "",
+                dialogHeader: "",
+                dialogImage: "",
+                dialogType: [
+                    "History",
+                    "Last Activity",
+                    "Attack",
+                    "Requests by Type"
+                ],
+                dialogImages: [
+                    "Computing-Works_.jpg",
+                    "Last-Activity_.jpg",
+                    "Last-Activity_.jpg",
+                    "Last-Activity_.jpg"
+                ],
+                links: [
+                    'Discover at Kibana',
+		            'Log out',
+                ],
+                icons: [
+                    'mdi-facebook',
+                    'mdi-twitter',
+                    'mdi-linkedin',
+                    'mdi-instagram',
+                ],
+                machinesHeaders: [
+                    "№",
+                    "NAME",
+                    "IP",
+                    "HEALTH",
+                    "LAST ACTIVITY",
+                    "COUNTER"
+                ],
+                machines: [
+//                     {
+//                         "_id": "60a617a867ab8c54277f00c4",
+//                         "name": "pc1",
+//                         "ipAddress": "192.168.1.35",
+
+// 			"history":[
+//                             {
+//                                 "_id": "60a77109b75bb91b54ad24eb",
+//                                 "period": "2021-05-21T11:06:24.801Z---2021-05-21T11:36:24.801Z",
+//                                 "value": 19055,
+//                                 "byRequestType": [
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ec",
+//                                         "name": "flow",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ed",
+//                                         "name": "mongodb",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ee",
+//                                         "name": "icmp",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ef",
+//                                         "name": "dns",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24f0",
+//                                         "name": "tls",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24f1",
+//                                         "name": "http",
+//                                         "value": 0
+//                                     }
+//                                 ]
+//                             }
+// ],		
+//                         "numberOfRequestsPerPeriod": [
+//                             {
+//                                 "_id": "60a77109b75bb91b54ad24eb",
+//                                 "period": "2021-05-21T11:06:24.801Z---2021-05-21T11:36:24.801Z",
+//                                 "value": 98077,
+//                                 "byRequestType": [
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ec",
+//                                         "name": "flow",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ed",
+//                                         "name": "mongodb",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ee",
+//                                         "name": "icmp",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ef",
+//                                         "name": "dns",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24f0",
+//                                         "name": "tls",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24f1",
+//                                         "name": "http",
+//                                         "value": 0
+//                                     }
+//                                 ]
+//                             },
+//                             {
+//                                 "_id": "60a7abca64d30e318cd26a95",
+//                                 "period": "2021-05-21T15:17:06.445Z---2021-05-21T15:47:06.445Z",
+//                                 "value": 0,
+//                                 "byRequestType": [
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a96",
+//                                         "name": "flow",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a97",
+//                                         "name": "mongodb",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a98",
+//                                         "name": "icmp",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a99",
+//                                         "name": "dns",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a9a",
+//                                         "name": "tls",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a9b",
+//                                         "name": "http",
+//                                         "value": 0
+//                                     }
+//                                 ]
+//                             }
+//                         ],
+//                         "health": 3,
+//                         "attack": {"ip": "191.111.111.111", "type": "http"},
+//                         "lastActivity": {
+//                             "_index": "pc2_packetbeat-2021.05.21-7.12.1",
+//                             "_type": "doc",
+//                             "_id": "MXwxk3kBLgkqUM1X5QLu",
+//                             "_score": null,
+//                             "_source": {
+//                                 "@timestamp": "2021-05-21T08:40:04.476Z",
+//                                 "event": {
+//                                     "type": [
+//                                         "connection",
+//                                         "protocol"
+//                                     ],
+//                                     "kind": "event",
+//                                     "dataset": "mongodb",
+//                                     "start": "2021-05-21T08:40:10.163Z",
+//                                     "category": [
+//                                         "network_traffic",
+//                                         "network"
+//                                     ]
+//                                 },
+//                                 "source": {
+//                                     "ip": "127.0.0.1",
+//                                     "port": 57328,
+//                                     "bytes": 52
+//                                 },
+//                                 "server": {
+//                                     "ip": "127.0.0.1",
+//                                     "port": 27017
+//                                 },
+//                                 "method": "msg",
+//                                 "resource": "",
+//                                 "network": {
+//                                     "transport": "tcp",
+//                                     "protocol": "mongodb",
+//                                     "direction": "ingress",
+//                                     "community_id": "1:xkcoXNV5uILpFPQRyrc/3WW8P9g=",
+//                                     "bytes": 52,
+//                                     "type": "ipv4"
+//                                 },
+//                                 "related": {
+//                                     "ip": [
+//                                         "127.0.0.1"
+//                                     ]
+//                                 },
+//                                 "type": "http",
+//                                 "status": "OK",
+//                                 "query": ".msg()",
+//                                 "ecs": {
+//                                     "version": "1.8.0"
+//                                 },
+//                                 "mongodb": {},
+//                                 "destination": {
+//                                     "ip": "127.0.0.1",
+//                                     "port": 27017
+//                                 },
+//                                 "client": {
+//                                     "ip": "127.0.0.1",
+//                                     "port": 57328,
+//                                     "bytes": 52
+//                                 },
+//                                 "host": {
+//                                     "ip": [
+//                                         "192.168.1.34",
+//                                         "fe80::165f:f4b4:2906:afe0",
+//                                         "172.17.0.1"
+//                                     ],
+//                                     "mac": [
+//                                         "50:7b:9d:54:7a:2a",
+//                                         "dc:53:60:4b:e5:88",
+//                                         "02:42:31:a8:31:27"
+//                                     ],
+//                                     "hostname": "andrew-T450s",
+//                                     "architecture": "x86_64",
+//                                     "name": "andrew-T450s",
+//                                     "os": {
+//                                         "version": "18.04.5 LTS (Bionic Beaver)",
+//                                         "family": "debian",
+//                                         "name": "Ubuntu",
+//                                         "kernel": "5.4.0-73-generic",
+//                                         "codename": "bionic",
+//                                         "type": "linux",
+//                                         "platform": "ubuntu"
+//                                     },
+//                                     "id": "fa9497a13d9544fcaf03b8666c67ef43",
+//                                     "containerized": false
+//                                 },
+//                                 "agent": {
+//                                     "version": "7.12.1",
+//                                     "hostname": "andrew-T450s",
+//                                     "ephemeral_id": "a95a2627-ef61-429b-a427-b0a39161ee03",
+//                                     "id": "e81e5d2d-662c-402f-a572-6679f73afe5c",
+//                                     "name": "andrew-T450s",
+//                                     "type": "packetbeat"
+//                                 }
+//                             },
+//                             "sort": [
+//                                 1621586410163
+//                             ]
+//                         }
+//                     },{
+//                         "_id": "60a617a867ab8c54277f00c4",
+//                         "name": "pc2",
+//                         "ipAddress": "192.168.1.31",
+
+// 			"history":[
+//                             {
+//                                 "_id": "60a77109b75bb91b54ad24eb",
+//                                 "period": "2021-05-21T11:06:24.801Z---2021-05-21T11:36:24.801Z",
+//                                 "value": 1863,
+//                                 "byRequestType": [
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ec",
+//                                         "name": "flow",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ed",
+//                                         "name": "mongodb",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ee",
+//                                         "name": "icmp",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ef",
+//                                         "name": "dns",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24f0",
+//                                         "name": "tls",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24f1",
+//                                         "name": "http",
+//                                         "value": 0
+//                                     }
+//                                 ]
+//                             }
+// ],		
+//                         "numberOfRequestsPerPeriod": [
+//                             {
+//                                 "_id": "60a77109b75bb91b54ad24eb",
+//                                 "period": "2021-05-21T11:06:24.801Z---2021-05-21T11:36:24.801Z",
+//                                 "value": 1863,
+//                                 "byRequestType": [
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ec",
+//                                         "name": "flow",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ed",
+//                                         "name": "mongodb",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ee",
+//                                         "name": "icmp",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ef",
+//                                         "name": "dns",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24f0",
+//                                         "name": "tls",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24f1",
+//                                         "name": "http",
+//                                         "value": 0
+//                                     }
+//                                 ]
+//                             },
+//                             {
+//                                 "_id": "60a7abca64d30e318cd26a95",
+//                                 "period": "2021-05-21T15:17:06.445Z---2021-05-21T15:47:06.445Z",
+//                                 "value": 0,
+//                                 "byRequestType": [
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a96",
+//                                         "name": "flow",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a97",
+//                                         "name": "mongodb",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a98",
+//                                         "name": "icmp",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a99",
+//                                         "name": "dns",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a9a",
+//                                         "name": "tls",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a9b",
+//                                         "name": "http",
+//                                         "value": 0
+//                                     }
+//                                 ]
+//                             }
+//                         ],
+//                         "health": 1,
+//                         "lastActivity": {
+//                             "_index": "pc2_packetbeat-2021.05.21-7.12.1",
+//                             "_type": "doc",
+//                             "_id": "MXwxk3kBLgkqUM1X5QLu",
+//                             "_score": null,
+//                             "_source": {
+//                                 "@timestamp": "2021-05-21T08:40:10.163Z",
+//                                 "event": {
+//                                     "type": [
+//                                         "connection",
+//                                         "protocol"
+//                                     ],
+//                                     "kind": "event",
+//                                     "dataset": "mongodb",
+//                                     "start": "2021-05-21T08:40:10.163Z",
+//                                     "category": [
+//                                         "network_traffic",
+//                                         "network"
+//                                     ]
+//                                 },
+//                                 "source": {
+//                                     "ip": "127.0.0.1",
+//                                     "port": 57328,
+//                                     "bytes": 52
+//                                 },
+//                                 "server": {
+//                                     "ip": "127.0.0.1",
+//                                     "port": 27017
+//                                 },
+//                                 "method": "msg",
+//                                 "resource": "",
+//                                 "network": {
+//                                     "transport": "tcp",
+//                                     "protocol": "mongodb",
+//                                     "direction": "ingress",
+//                                     "community_id": "1:xkcoXNV5uILpFPQRyrc/3WW8P9g=",
+//                                     "bytes": 52,
+//                                     "type": "ipv4"
+//                                 },
+//                                 "related": {
+//                                     "ip": [
+//                                         "127.0.0.1"
+//                                     ]
+//                                 },
+//                                 "type": "mongodb",
+//                                 "status": "OK",
+//                                 "query": ".msg()",
+//                                 "ecs": {
+//                                     "version": "1.8.0"
+//                                 },
+//                                 "mongodb": {},
+//                                 "destination": {
+//                                     "ip": "127.0.0.1",
+//                                     "port": 27017
+//                                 },
+//                                 "client": {
+//                                     "ip": "127.0.0.1",
+//                                     "port": 57328,
+//                                     "bytes": 52
+//                                 },
+//                                 "host": {
+//                                     "ip": [
+//                                         "192.168.1.34",
+//                                         "fe80::165f:f4b4:2906:afe0",
+//                                         "172.17.0.1"
+//                                     ],
+//                                     "mac": [
+//                                         "50:7b:9d:54:7a:2a",
+//                                         "dc:53:60:4b:e5:88",
+//                                         "02:42:31:a8:31:27"
+//                                     ],
+//                                     "hostname": "andrew-T450s",
+//                                     "architecture": "x86_64",
+//                                     "name": "andrew-T450s",
+//                                     "os": {
+//                                         "version": "18.04.5 LTS (Bionic Beaver)",
+//                                         "family": "debian",
+//                                         "name": "Ubuntu",
+//                                         "kernel": "5.4.0-73-generic",
+//                                         "codename": "bionic",
+//                                         "type": "linux",
+//                                         "platform": "ubuntu"
+//                                     },
+//                                     "id": "fa9497a13d9544fcaf03b8666c67ef43",
+//                                     "containerized": false
+//                                 },
+//                                 "agent": {
+//                                     "version": "7.12.1",
+//                                     "hostname": "andrew-T450s",
+//                                     "ephemeral_id": "a95a2627-ef61-429b-a427-b0a39161ee03",
+//                                     "id": "e81e5d2d-662c-402f-a572-6679f73afe5c",
+//                                     "name": "andrew-T450s",
+//                                     "type": "packetbeat"
+//                                 }
+//                             },
+//                             "sort": [
+//                                 1621586410163
+//                             ]
+//                         }
+//                     },{
+//                         "_id": "60a617a867ab8c54277f00c4",
+//                         "name": "pc3",
+//                         "ipAddress": "192.168.1.32",
+
+// 			"history":[
+//                             {
+//                                 "_id": "60a77109b75bb91b54ad24eb",
+//                                 "period": "2021-05-21T11:06:24.801Z---2021-05-21T11:36:24.801Z",
+//                                 "value": 7574,
+//                                 "byRequestType": [
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ec",
+//                                         "name": "flow",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ed",
+//                                         "name": "mongodb",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ee",
+//                                         "name": "icmp",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ef",
+//                                         "name": "dns",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24f0",
+//                                         "name": "tls",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24f1",
+//                                         "name": "http",
+//                                         "value": 0
+//                                     }
+//                                 ]
+//                             }
+// ],		
+//                         "numberOfRequestsPerPeriod": [
+//                             {
+//                                 "_id": "60a77109b75bb91b54ad24eb",
+//                                 "period": "2021-05-21T11:06:24.801Z---2021-05-21T11:36:24.801Z",
+//                                 "value": 7574,
+//                                 "byRequestType": [
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ec",
+//                                         "name": "flow",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ed",
+//                                         "name": "mongodb",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ee",
+//                                         "name": "icmp",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24ef",
+//                                         "name": "dns",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24f0",
+//                                         "name": "tls",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a77109b75bb91b54ad24f1",
+//                                         "name": "http",
+//                                         "value": 0
+//                                     }
+//                                 ]
+//                             },
+//                             {
+//                                 "_id": "60a7abca64d30e318cd26a95",
+//                                 "period": "2021-05-21T15:17:06.445Z---2021-05-21T15:47:06.445Z",
+//                                 "value": 0,
+//                                 "byRequestType": [
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a96",
+//                                         "name": "flow",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a97",
+//                                         "name": "mongodb",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a98",
+//                                         "name": "icmp",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a99",
+//                                         "name": "dns",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a9a",
+//                                         "name": "tls",
+//                                         "value": 0
+//                                     },
+//                                     {
+//                                         "_id": "60a7abca64d30e318cd26a9b",
+//                                         "name": "http",
+//                                         "value": 0
+//                                     }
+//                                 ]
+//                             }
+//                         ],
+//                         "health": 2,
+//                         "lastActivity": {
+//                             "_index": "pc2_packetbeat-2021.05.21-7.12.1",
+//                             "_type": "doc",
+//                             "_id": "MXwxk3kBLgkqUM1X5QLu",
+//                             "_score": null,
+//                             "_source": {
+//                                 "@timestamp": "2021-05-21T08:40:17.386Z",
+//                                 "event": {
+//                                     "type": [
+//                                         "connection",
+//                                         "protocol"
+//                                     ],
+//                                     "kind": "event",
+//                                     "dataset": "mongodb",
+//                                     "start": "2021-05-21T08:40:10.163Z",
+//                                     "category": [
+//                                         "network_traffic",
+//                                         "network"
+//                                     ]
+//                                 },
+//                                 "source": {
+//                                     "ip": "127.0.0.1",
+//                                     "port": 57328,
+//                                     "bytes": 52
+//                                 },
+//                                 "server": {
+//                                     "ip": "127.0.0.1",
+//                                     "port": 27017
+//                                 },
+//                                 "method": "msg",
+//                                 "resource": "",
+//                                 "network": {
+//                                     "transport": "tcp",
+//                                     "protocol": "mongodb",
+//                                     "direction": "ingress",
+//                                     "community_id": "1:xkcoXNV5uILpFPQRyrc/3WW8P9g=",
+//                                     "bytes": 52,
+//                                     "type": "ipv4"
+//                                 },
+//                                 "related": {
+//                                     "ip": [
+//                                         "127.0.0.1"
+//                                     ]
+//                                 },
+//                                 "type": "dns",
+//                                 "status": "OK",
+//                                 "query": ".msg()",
+//                                 "ecs": {
+//                                     "version": "1.8.0"
+//                                 },
+//                                 "mongodb": {},
+//                                 "destination": {
+//                                     "ip": "127.0.0.1",
+//                                     "port": 27017
+//                                 },
+//                                 "client": {
+//                                     "ip": "127.0.0.1",
+//                                     "port": 57328,
+//                                     "bytes": 52
+//                                 },
+//                                 "host": {
+//                                     "ip": [
+//                                         "192.168.1.34",
+//                                         "fe80::165f:f4b4:2906:afe0",
+//                                         "172.17.0.1"
+//                                     ],
+//                                     "mac": [
+//                                         "50:7b:9d:54:7a:2a",
+//                                         "dc:53:60:4b:e5:88",
+//                                         "02:42:31:a8:31:27"
+//                                     ],
+//                                     "hostname": "andrew-T450s",
+//                                     "architecture": "x86_64",
+//                                     "name": "andrew-T450s",
+//                                     "os": {
+//                                         "version": "18.04.5 LTS (Bionic Beaver)",
+//                                         "family": "debian",
+//                                         "name": "Ubuntu",
+//                                         "kernel": "5.4.0-73-generic",
+//                                         "codename": "bionic",
+//                                         "type": "linux",
+//                                         "platform": "ubuntu"
+//                                     },
+//                                     "id": "fa9497a13d9544fcaf03b8666c67ef43",
+//                                     "containerized": false
+//                                 },
+//                                 "agent": {
+//                                     "version": "7.12.1",
+//                                     "hostname": "andrew-T450s",
+//                                     "ephemeral_id": "a95a2627-ef61-429b-a427-b0a39161ee03",
+//                                     "id": "e81e5d2d-662c-402f-a572-6679f73afe5c",
+//                                     "name": "andrew-T450s",
+//                                     "type": "packetbeat"
+//                                 }
+//                             },
+//                             "sort": [
+//                                 1621586410163
+//                             ]
+//                         }
+//                     }
+                ]
+            }
+        },
+        created () {
+            this.fetchData()
+        },
+        methods: {
+            kibana: function(event){ if(event.target.outerText==="DISCOVER AT KIBANA") {window.location.href = "http://localhost:5601/app/kibana#/discover";}},
+            fetchData () {
+                const access_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjp7Il9pZCI6IjYwYTRkYmViZDI1MmE0MzkwYmFiMTY0ZiJ9LCJpbmZvIjp7ImJyb3dzZXIiOiJDaHJvbWUiLCJvcyI6IkxpbnV4IiwidXNlci1hZ2VudCI6Ik1vemlsbGEvNS4wIChYMTE7IExpbnV4IHg4Nl82NCkgQXBwbGVXZWJLaXQvNTM3LjM2IChLSFRNTCwgbGlrZSBHZWNrbykgQ2hyb21lLzg3LjAuNDI4MC42NiBTYWZhcmkvNTM3LjM2In0sImxvZ2luTWV0aG9kIjoiZW1haWwiLCJpYXQiOjE2MjMyNzAzODYsImV4cCI6MTYyMzM1Njc4Nn0.Z6Pi9juz3SNUDe7wYfxH8PO9yNZ-EYJ9OrdsFOTtt44"
+                axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
+
+                const url = "http://localhost:8020/api/machines/get"
+                const data = {
+                    "filter":{}
+                }
+                const config = {
+                    headers: {'Referrer-Policy':'unsafe-url', 'Access-Control-Allow-Origin': 'http://192.168.1.34:8020', 'Access-Control-Allow-Methods' : 'GET, POST, PATCH, PUT, DELETE, OPTIONS',
+                        'Access-Control-Allow-Headers' : 'Origin, Content-Type, Access-Control-Allow-Headers, X-Auth-Token, X-Requested-With'}
+                };
+                axios.post(url,data,config).then(response => {
+                    this.machines = response.data.data.machines
+                })
+            },
+            say: function (message, type) {
+                this.dialog = true
+                this.dialogText = message.split('\n')
+                for (let i in this.dialogText){
+                    this.dialogText[i] = this.dialogText[i].replaceAll(" ", "\u00A0")
+                }
+                this.dialogHeader = this.dialogType[type]
+                this.dialogImage = this.dialogImages[type]
+
+            }
+        }
+    })
+</script>
+</body>
+</html>

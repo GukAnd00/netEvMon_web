@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Register at NetEvMon</title>
+    <meta charset="utf-8">
+
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify/dist/vuetify.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+
+    <link href="https://cdn.jsdelivr.net/npm/vuetify/dist/vuetify.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+
+
+</head>
+
+<body class="bg-light">
+<div id="app" class="container">
+    <br>
+    <v-app id="inspire" style="background:#f8f9fa;color:white">
+    <form id="forms" class="needs-validation" novalidate="">
+        <div class="row d-flex justify-content-center">
+
+            <div class="col-md-3 mb-3 "></div>
+
+
+            <div class="col-md-4 mb-4 ">
+                <input id="email" class="form-control" type="text" placeholder="email" v-model="email" value="">
+            </div>
+
+            <div class="col-md-2 mb-2 "></div>
+
+            <div class="col-md-1 mb-1 " id="loginButton">
+                <v-btn  rounded block color="#0560ab"  dark v-on:click="loginButton">Log in</v-btn>
+                <!--<button class='btn btn-primary btn-lg btn-block col-md-12' v-on:click="sendButton">send</button>-->
+            </div>
+
+        </div>
+
+        <div class="row d-flex justify-content-center">
+            <div class="col-md-4 mb-4">
+                <input id="password" class="form-control" type="password" placeholder="password" v-model="password" value="">
+             </div>
+        </div>
+
+        <div class="row d-flex justify-content-center">
+            <div class="col-md-4 mb-4 " id="RegisterButton">
+                <v-btn x-large rounded block color="#0676d1" height="80" dark v-on:click="RegisterButton"><h3>Register</h3></v-btn>
+                <!--<button class='btn btn-primary btn-lg btn-block col-md-12' v-on:click="sendButton">send</button>-->
+            </div>
+
+        </div>
+
+        <div class="row d-flex justify-content-center">
+            <div class="col-md-12 mb-12" >
+
+                        <v-alert v-if="seensucs" type="success">
+                            Success
+                        </v-alert>
+
+                        <v-alert v-if="seenerr" type="error">
+                            {{text}}
+                        </v-alert>
+
+            </div>
+        </div>
+
+     </form>
+    </v-app>
+ </div>
+ </div>
+
+ <script>
+
+     function getHash(str, algo = "SHA-256") {
+         let strBuf = new TextEncoder('utf-8').encode(str);
+         return crypto.subtle.digest(algo, strBuf)
+             .then(hash => {
+                 window.hash = hash;
+                 // here hash is an arrayBuffer,
+                 // so we'll connvert it to its hex version
+                 let result = '';
+                 const view = new DataView(hash);
+                 for (let i = 0; i < hash.byteLength; i += 4) {
+                     result += ('00000000' + view.getUint32(i).toString(16)).slice(-8);
+                 }
+                 return result;
+             });
+     }
+
+
+     let app=new Vue({
+         el: '#app',
+         vuetify: new Vuetify(),
+         data: {email:'',
+             password:'',
+             seensucs:false,
+             seenerr:false,
+             text:"",
+             loginButton: function() {
+                 document.location.href="login.html";
+             },
+             RegisterButton: function() {
+                 if(app.login!=''&&app.password!=''&&app.birthYear!=''){
+                     $.post("/api/identify", {login: app.login},async function (data) {
+                         if (data.status===false){
+
+                     let passwordHash = '';
+
+                     getHash(app.password, 'SHA-256')
+                         .then(hash => {
+                             passwordHash=hash.slice(0,hash.length/2);
+                             console.log(passwordHash);
+                             $.post("/api/user", {login: app.login, password: passwordHash, birthYear: app.birthYear, message: app.message}, function (data) { if(data.status===true){app.seenerr=false; app.seensucs=true}else{app.seensucs=false;  app.text="Виникла помилка";app.seenerr=true;}}, "json");
+                             app.login="", app.password="", app.birthYear="", app.message="";
+                         });
+
+                    } else{app.seensucs=false;  app.text="Користувач вже існує!"; app.seenerr=true;}}, "json");}  else{app.seensucs=false;  app.text="Заповніть всі необхідні поля!"; app.seenerr=true;}
+             }
+         }
+     })
+
+     $(document).ready(function() {
+     });
+
+ </script>
+ </body>
+ </html>
